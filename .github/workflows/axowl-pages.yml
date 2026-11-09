@@ -1,0 +1,65 @@
+# Axowl 이 넣은 파일입니다 — .NET(Blazor WASM)을 빌드해 스토리마다 미리보기를 만듭니다.
+#   🚨 build 잡에는 시크릿이 없습니다(여기서 저장소 코드가 컴파일됩니다).
+#   🚨 deploy 잡은 저장소 코드를 실행하지 않고 artifact 만 올립니다.
+name: axowl-pages
+
+on:
+  push:
+    branches: [main, 'axowl/agent/**']
+  workflow_dispatch:
+
+concurrency:
+  group: axowl-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      # [2026-11-09 Sonny "테스트 단계가 없다니 치명적"] 테스트 프로젝트가 있으면 돌린다 — 없으면 건너뛴다(에이전트가 되묻지 않게).
+      - name: Test
+        run: |
+          if find . -name '*.csproj' \( -iname '*test*' -o -path './tests/*' \) | grep -q .; then
+            SLN="$(ls *.sln 2>/dev/null | head -1)"
+            dotnet test "${SLN:-.}" -c Release --nologo
+          else
+            echo "no test project found — skipping tests"
+          fi
+      - name: Publish
+        run: dotnet publish src/Conclave.Client/Conclave.Client.csproj -c Release -o _publish --nologo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: _publish/wwwroot
+          retention-days: 3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      url: ${{ steps.publish.outputs.url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: _site
+      - id: publish
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          OUT="$(npx --yes wrangler@3 pages deploy _site \
+            --project-name='conclave2' --branch="$GITHUB_REF_NAME" 2>&1 | tee /dev/stderr)"
+          URL="$(echo "$OUT" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -1)"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "미리보기: $URL" >> "$GITHUB_STEP_SUMMARY"
