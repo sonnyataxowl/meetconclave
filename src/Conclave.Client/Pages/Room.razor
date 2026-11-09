@@ -120,8 +120,7 @@
     private async Task ToggleMic() { _mic = !_mic; await (await Api.Js()).InvokeVoidAsync("setMic", _mic); }
     private async Task ToggleCam() { _cam = !_cam; await (await Api.Js()).InvokeVoidAsync("setCamera", _cam); }
     private string MailTo => "mailto:?subject=" + Uri.EscapeDataString("[Conclave] " + (_meeting?.Title ?? "") + " 회의 초대 (회의 번호 " + Id + ")")
-        + "&body=" + Uri.EscapeDataString(string.Join("
-", new[] {
+        + "&body=" + Uri.EscapeDataString(string.Join(Environment.NewLine, new[] {
             (_meeting?.HostName ?? "호스트") + " 님이 회의에 초대했습니다.",
             "회의 번호: " + Id,
             "",
