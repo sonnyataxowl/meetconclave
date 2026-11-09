@@ -19,6 +19,14 @@
             <a class="cc-btn cc-btn-primary" href="/verify/@_meeting.SealId">봉인 확인</a>
         </div>
     }
+    else if (!_joined && InviteLink.Resolve(_meeting, _user is not null) == InviteEntry.Ended)
+    {
+        <div class="cc-card cc-center">
+            <h1>@_meeting.Title</h1>
+            <p>이 회의는 이미 종료되어 입장할 수 없습니다.</p>
+            <a class="cc-btn" href="@(_user is null ? "/" : "/meetings")">@(_user is null ? "처음으로" : "내 회의로")</a>
+        </div>
+    }
     else if (!_joined)
     {
         <div class="cc-card cc-center cc-join">
@@ -26,6 +34,7 @@
             <p class="cc-muted">호스트 @_meeting.HostName · 입장하면 카메라·마이크를 켭니다</p>
             @if (_user is null)
             {
+                <p class="cc-muted cc-small">Axowl 로 로그인하면 이 회의에 바로 입장합니다.</p>
                 <input class="cc-input" placeholder="표시할 이름" @bind="_name" maxlength="40" />
             }
             <div class="cc-row cc-center">
@@ -95,13 +104,15 @@
         var (m, err) = await Api.GetMeetingAsync(Id);
         _meeting = m; _error = m is null ? (err ?? "회의를 찾을 수 없습니다.") : null;
         StateHasChanged();
+        // Invite link opened by a signed-in user: go straight into the room.
+        if (InviteLink.Resolve(m, _user is not null) == InviteEntry.AutoJoin) await Join();
     }
 
     private async Task Join()
     {
         _busy = true; _error = null; StateHasChanged();
-        var (j, err) = await Api.JoinTokenAsync(Id, string.IsNullOrWhiteSpace(_name) ? "참가자" : _name.Trim());
-        if (j is null) { _error = err ?? "입장 토큰을 받지 못했습니다."; _busy = false; return; }
+        var (j, err) = await Api.JoinTokenAsync(Id, string.IsNullOrWhiteSpace(_name) ? (_user?.Name ?? "참가자") : _name.Trim());
+        if (j is null) { _error = err ?? "입장 토큰을 받지 못했습니다."; _busy = false; StateHasChanged(); return; }
         _join = j; _isHost = j.IsHost; _joined = true; StateHasChanged();
         try
         {
@@ -118,7 +129,7 @@
 
     private async Task ToggleMic() { _mic = !_mic; await (await Api.Js()).InvokeVoidAsync("setMic", _mic); }
     private async Task ToggleCam() { _cam = !_cam; await (await Api.Js()).InvokeVoidAsync("setCamera", _cam); }
-    private async Task CopyInvite() { _copied = await (await Api.Js()).InvokeAsync<bool>("copyText", Nav.Uri); StateHasChanged(); await Task.Delay(1500); _copied = false; }
+    private async Task CopyInvite() { _copied = await (await Api.Js()).InvokeAsync<bool>("copyText", _meeting?.JoinUrl ?? Nav.Uri); StateHasChanged(); await Task.Delay(1500); _copied = false; }
 
     private async Task StartRec()
     {
