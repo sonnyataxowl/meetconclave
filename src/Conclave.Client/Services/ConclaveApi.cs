@@ -16,6 +16,7 @@ public sealed class ConclaveApi(HttpClient http, IJSRuntime js) : IAsyncDisposab
     public async Task LoginAsync(string returnTo) => await (await Js()).InvokeVoidAsync("login", returnTo);
     public async Task LogoutAsync() => await (await Js()).InvokeVoidAsync("logout");
     public async Task<string?> CompleteLoginAsync() => await (await Js()).InvokeAsync<string?>("completeLogin");
+    public async Task<bool> ConsumeAutoJoinAsync(string meetingId) => await (await Js()).InvokeAsync<bool>("consumeAutoJoin", meetingId);
 
     private async Task<HttpRequestMessage> Req(HttpMethod m, string path, object? body = null)
     {

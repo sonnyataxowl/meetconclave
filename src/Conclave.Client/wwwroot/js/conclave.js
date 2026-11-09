@@ -6,6 +6,7 @@ export const AXOWL_PORTAL = 'https://login.axowl.com';
 export const CLIENT_KEY = 'client_6f8eb765181d45ff938e';
 const TOKEN_KEY = 'axowl_access_token';          // same key as @axowl/sdk-core → interoperable
 const RETURN_KEY = 'conclave_return_to';
+const AUTOJOIN_KEY = 'conclave_autojoin';
 
 // ───────── auth ─────────
 export function login(returnTo) {
@@ -30,7 +31,19 @@ export async function completeLogin() {
   history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
   let back = null;
   try { back = localStorage.getItem(RETURN_KEY); localStorage.removeItem(RETURN_KEY); } catch {}
+  // Coming back from login to an invite link: remember it so the room joins without another click.
+  if (back && back.startsWith('/m/')) { try { sessionStorage.setItem(AUTOJOIN_KEY, back); } catch {} }
   return back && back !== '/' ? back : '/meetings';
+}
+
+/** True once if we just came back from login to this meeting's invite link. */
+export function consumeAutoJoin(meetingId) {
+  try {
+    const v = sessionStorage.getItem(AUTOJOIN_KEY);
+    if (!v) return false;
+    sessionStorage.removeItem(AUTOJOIN_KEY);
+    return v === '/m/' + encodeURIComponent(meetingId);
+  } catch { return false; }
 }
 
 export function token() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
