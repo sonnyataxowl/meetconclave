@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
 @using Conclave.Client.Services
 @inject ConclaveApi Api
+@inject NavigationManager Nav
+@implements IDisposable
 
 <div class="cc-shell">
     <header class="cc-header">
@@ -30,10 +32,13 @@
 @code {
     private AxowlUser? _user;
     private Task LoginMeetings() => Api.LoginAsync("/meetings");
+    protected override void OnInitialized() => Nav.LocationChanged += OnMoved;
+    private async void OnMoved(object? s, LocationChangedEventArgs e) { _user = await Api.UserAsync(); StateHasChanged(); }
     protected override async Task OnAfterRenderAsync(bool first)
     {
         if (!first) return;
         _user = await Api.UserAsync();
         StateHasChanged();
     }
+    public void Dispose() => Nav.LocationChanged -= OnMoved;
 }

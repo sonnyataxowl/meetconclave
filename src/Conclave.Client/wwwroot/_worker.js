@@ -107,16 +107,18 @@ async function api(request, url, env) {
     if (!rows.length) return json({ error: 'not_found' }, 404);
     const r = rows[0];
     return json({ sealId: r.seal_id, meetingId: r.id, title: r.title, hostName: r.host_name, sha256: r.recording_sha256,
-      bytes: Number(r.recording_bytes || 0), durationMs: Number(r.recording_ms || 0), startedAt: r.started_at, endedAt: r.ended_at,
-      sealedAt: r.sealed_at, axowlEventId: r.axowl_event_id, ledger: 'axowl', org: AXOWL_ORG });
+      bytes: Number(r.recording_bytes || 0), durationMs: Number(r.recording_ms || 0), startedAt: iso(r.started_at), endedAt: iso(r.ended_at),
+      sealedAt: iso(r.sealed_at), axowlEventId: r.axowl_event_id, ledger: 'axowl', org: AXOWL_ORG });
   }
 
   return json({ error: 'not_found' }, 404);
 }
 
+// Neon HTTP returns timestamptz as '2026-11-09 03:20:01.12+00' — .NET wants ISO-8601, so normalize here.
+function iso(v) { if (!v) return null; const d = new Date(String(v).replace(' ', 'T').replace(/\+00$/, 'Z')); return isNaN(d) ? null : d.toISOString(); }
 function pub(r) {
-  return { id: r.id, title: r.title, hostName: r.host_name, createdAt: r.created_at, startedAt: r.started_at, endedAt: r.ended_at,
-    sealId: r.seal_id, sealedAt: r.sealed_at, sha256: r.recording_sha256 || null, bytes: r.recording_bytes ? Number(r.recording_bytes) : null,
+  return { id: r.id, title: r.title, hostName: r.host_name, createdAt: iso(r.created_at), startedAt: iso(r.started_at), endedAt: iso(r.ended_at),
+    sealId: r.seal_id, sealedAt: iso(r.sealed_at), sha256: r.recording_sha256 || null, bytes: r.recording_bytes ? Number(r.recording_bytes) : null,
     durationMs: r.recording_ms ? Number(r.recording_ms) : null };
 }
 
