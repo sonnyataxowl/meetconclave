@@ -1,0 +1,9 @@
+{
+  "name": "conclave-functions",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Pages Functions 의존성 (Blazor 클라이언트는 .NET 이라 여기에 없음)",
+  "dependencies": {
+    "postgres": "3.4.5"
+  }
+}
