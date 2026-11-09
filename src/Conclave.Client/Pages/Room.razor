@@ -52,7 +52,8 @@
                 <button class="cc-btn" @onclick="ToggleCam">@(_cam ? "카메라 끄기" : "카메라 켜기")</button>
                 @if (_isHost && !_recording && _result is null) { <button class="cc-btn cc-btn-rec" @onclick="StartRec">녹화 시작</button> }
                 @if (_isHost && _recording) { <button class="cc-btn cc-btn-rec" @onclick="StopRec" disabled="@_busy">@(_busy ? "지문 계산 중…" : "녹화 종료 → 봉인")</button> }
-                <button class="cc-btn" @onclick="Leave">나가기</button>
+                @if (_isHost) { <button class="cc-btn" @onclick="EndMeeting" disabled="@_recording">회의 종료</button> }
+                <button class="cc-btn" @onclick="Leave">@(_isHost ? "나가기(회의는 유지)" : "나가기")</button>
             </div>
         </div>
         @if (_error is not null) { <p class="cc-error">@_error</p> }
@@ -159,10 +160,17 @@
         _busy = false; StateHasChanged();
     }
 
+    private async Task EndMeeting()
+    {
+        await (await Api.Js()).InvokeVoidAsync("leaveRoom");
+        await Api.EndMeetingAsync(Id);
+        if (_sealed?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }
+        Nav.NavigateTo("/meetings");
+    }
+
     private async Task Leave()
     {
         await (await Api.Js()).InvokeVoidAsync("leaveRoom");
-        if (_isHost && _result is null) await Api.EndMeetingAsync(Id);
         if (_sealed?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }   // 봉인 뒤 나가기 = 봉인 기록 화면으로
         Nav.NavigateTo(_user is null ? "/" : "/meetings");
     }
