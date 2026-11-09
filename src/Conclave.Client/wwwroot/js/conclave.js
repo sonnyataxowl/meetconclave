@@ -40,7 +40,7 @@ export function user() {
   try {
     const p = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     if (p.exp && p.exp * 1000 < Date.now()) { localStorage.removeItem(TOKEN_KEY); return null; }
-    return { sub: p.sub, name: p.name || p.display_name || p.given_name || p.email || '사용자', email: p.email || null };
+    return { sub: p.sub, name: p.name || p.display_name || p.given_name || (p.email ? String(p.email).split('@')[0] : '사용자'), email: p.email || null };
   } catch { return null; }
 }
 

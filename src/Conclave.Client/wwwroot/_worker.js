@@ -191,7 +191,8 @@ async function verifyAxowlJwt(token) {
   const key = await crypto.subtle.importKey('jwk', { ...jwk, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
   const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64uToBytes(s), new TextEncoder().encode(`${h}.${p}`));
   if (!ok) throw new Error('bad signature');
-  const name = payload.name || payload.display_name || payload.given_name || payload.email || payload.sub;
+  // Axowl end-user tokens carry email but no display name — show the local part (sonny@… → sonny) rather than a raw address.
+  const name = payload.name || payload.display_name || payload.given_name || (payload.email ? String(payload.email).split('@')[0] : payload.sub);
   return { sub: String(payload.sub), name: String(name).slice(0, 80), email: payload.email || null };
 }
 

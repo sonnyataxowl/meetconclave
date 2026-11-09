@@ -108,7 +108,7 @@
             _ref = DotNetObjectReference.Create(this);
             await (await Api.Js()).InvokeAsync<string>("joinRoom", "cc-grid", j.Url, j.Token, _ref);
         }
-        catch (Exception ex) { _error = "영상 연결 실패: " + ex.Message; }
+        catch (Exception ex) { _error = "영상 연결 실패 — " + (ex.Message.Contains("invalid token") ? "LiveKit 키 설정을 확인해 주세요(시크릿 불일치)." : ex.Message.Split(" at ")[0]); }
         _busy = false; StateHasChanged();
     }
 
