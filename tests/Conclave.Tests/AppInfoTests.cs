@@ -10,4 +10,10 @@ public class AppInfoTests
     {
         Assert.Equal("Conclave", AppInfo.Name);
     }
+
+    [Fact]
+    public void HomePath_IsRoot()
+    {
+        Assert.Equal("/", AppInfo.HomePath);
+    }
 }

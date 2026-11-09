@@ -1,8 +1,15 @@
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" />
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)" />
     </Found>
     <NotFound>
-        <p>페이지를 찾을 수 없습니다.</p>
+        <LayoutView Layout="@typeof(Layout.MainLayout)">
+            <PageTitle>페이지를 찾을 수 없습니다 · @AppInfo.Name</PageTitle>
+            <section class="cc-notfound">
+                <h1>404</h1>
+                <p>페이지를 찾을 수 없습니다.</p>
+                <a href="@AppInfo.HomePath">홈으로 돌아가기</a>
+            </section>
+        </LayoutView>
     </NotFound>
 </Router>
