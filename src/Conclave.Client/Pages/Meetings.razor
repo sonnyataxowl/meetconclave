@@ -1,0 +1,94 @@
+@page "/meetings"
+@using Conclave.Client.Services
+@inject ConclaveApi Api
+@inject NavigationManager Nav
+
+<PageTitle>내 회의 · @AppInfo.Name</PageTitle>
+
+<section class="cc-page">
+    <div class="cc-page-head">
+        <h1>내 회의</h1>
+        @if (_user is not null)
+        {
+            <span class="cc-muted">@_user.Name</span>
+        }
+    </div>
+
+    @if (_user is null)
+    {
+        <div class="cc-card cc-center">
+            <p>회의를 만들려면 Axowl 로그인이 필요합니다.</p>
+            <button class="cc-btn cc-btn-primary" @onclick="Login" disabled="@_busy">Axowl 로 로그인</button>
+        </div>
+    }
+    else
+    {
+        <form class="cc-row" @onsubmit="Create" @onsubmit:preventDefault>
+            <input class="cc-input" placeholder="회의 제목 (예: 11월 이사회)" @bind="_title" maxlength="120" />
+            <button class="cc-btn cc-btn-primary" type="submit" disabled="@_busy">
+                @if (_busy) { <span class="cc-spinner"></span> } 새 회의
+            </button>
+        </form>
+        @if (_error is not null) { <p class="cc-error">@_error</p> }
+
+        @if (_loading) { <p class="cc-muted">불러오는 중…</p> }
+        else if (_meetings.Count == 0) { <p class="cc-muted">아직 회의가 없습니다. 제목을 적고 새 회의를 만드세요.</p> }
+        else
+        {
+            <ul class="cc-list">
+                @foreach (var m in _meetings)
+                {
+                    <li class="cc-card cc-meeting">
+                        <div>
+                            <a class="cc-title" href="/m/@m.Id">@m.Title</a>
+                            <div class="cc-muted cc-small">
+                                @(m.CreatedAt?.ToLocalTime().ToString("MM-dd HH:mm")) ·
+                                @if (m.SealId is not null) { <span class="cc-badge cc-badge-sealed">봉인됨</span> }
+                                else if (m.EndedAt is not null) { <span class="cc-badge">끝남</span> }
+                                else if (m.StartedAt is not null) { <span class="cc-badge cc-badge-live">진행 중</span> }
+                                else { <span class="cc-badge">대기</span> }
+                            </div>
+                        </div>
+                        <div class="cc-actions">
+                            @if (m.SealId is not null) { <a class="cc-btn" href="/verify/@m.SealId">검증</a> }
+                            @if (m.EndedAt is null) { <a class="cc-btn cc-btn-primary" href="/m/@m.Id">입장</a> }
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</section>
+
+@code {
+    private AxowlUser? _user;
+    private List<Meeting> _meetings = new();
+    private string _title = "";
+    private bool _busy, _loading = true;
+    private string? _error;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _user = await Api.UserAsync();
+        if (_user is not null)
+        {
+            var (list, err) = await Api.MyMeetingsAsync();
+            _meetings = list?.Meetings ?? new();
+            _error = err;
+        }
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task Login() { _busy = true; await Api.LoginAsync("/meetings"); }
+
+    private async Task Create()
+    {
+        _busy = true; _error = null;
+        var (m, err) = await Api.CreateMeetingAsync(string.IsNullOrWhiteSpace(_title) ? "제목 없는 회의" : _title.Trim());
+        _busy = false;
+        if (m is null) { _error = err ?? "회의를 만들지 못했습니다."; return; }
+        Nav.NavigateTo($"/m/{m.Id}");
+    }
+}

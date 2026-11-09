@@ -1,0 +1,156 @@
+@page "/m/{Id}"
+@using Conclave.Client.Services
+@inject ConclaveApi Api
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<PageTitle>@(_meeting?.Title ?? "회의") · @AppInfo.Name</PageTitle>
+
+<section class="cc-room">
+    @if (_meeting is null)
+    {
+        <p class="cc-muted">@(_error ?? "회의를 불러오는 중…")</p>
+    }
+    else if (_meeting.SealId is not null)
+    {
+        <div class="cc-card cc-center">
+            <h1>@_meeting.Title</h1>
+            <p>이 회의는 끝났고 기록이 봉인되었습니다.</p>
+            <a class="cc-btn cc-btn-primary" href="/verify/@_meeting.SealId">봉인 확인</a>
+        </div>
+    }
+    else if (!_joined)
+    {
+        <div class="cc-card cc-center cc-join">
+            <h1>@_meeting.Title</h1>
+            <p class="cc-muted">호스트 @_meeting.HostName · 입장하면 카메라·마이크를 켭니다</p>
+            @if (_user is null)
+            {
+                <input class="cc-input" placeholder="표시할 이름" @bind="_name" maxlength="40" />
+            }
+            <div class="cc-row cc-center">
+                <button class="cc-btn cc-btn-primary" @onclick="Join" disabled="@_busy">
+                    @if (_busy) { <span class="cc-spinner"></span> } 입장
+                </button>
+                @if (_user is null) { <button class="cc-btn" @onclick="() => Api.LoginAsync(Nav.ToBaseRelativePath(Nav.Uri))">Axowl 로 로그인</button> }
+            </div>
+            @if (_error is not null) { <p class="cc-error">@_error</p> }
+        </div>
+    }
+    else
+    {
+        <div class="cc-room-head">
+            <div>
+                <strong>@_meeting.Title</strong>
+                <span class="cc-muted cc-small"> · 참가자 @_participants.Count 명 @(_isHost ? "· 호스트" : "")</span>
+                @if (_recording) { <span class="cc-badge cc-badge-rec">● 녹화 중</span> }
+            </div>
+            <div class="cc-actions">
+                <button class="cc-btn" @onclick="CopyInvite">@(_copied ? "복사됨" : "초대 링크 복사")</button>
+                <button class="cc-btn" @onclick="ToggleMic">@(_mic ? "마이크 끄기" : "마이크 켜기")</button>
+                <button class="cc-btn" @onclick="ToggleCam">@(_cam ? "카메라 끄기" : "카메라 켜기")</button>
+                @if (_isHost && !_recording && _result is null) { <button class="cc-btn cc-btn-rec" @onclick="StartRec">녹화 시작</button> }
+                @if (_isHost && _recording) { <button class="cc-btn cc-btn-rec" @onclick="StopRec" disabled="@_busy">@(_busy ? "지문 계산 중…" : "녹화 종료 → 봉인")</button> }
+                <button class="cc-btn" @onclick="Leave">나가기</button>
+            </div>
+        </div>
+        @if (_error is not null) { <p class="cc-error">@_error</p> }
+
+        <div id="cc-grid" class="cc-grid"></div>
+
+        @if (_result is not null)
+        {
+            <div class="cc-card cc-sealed">
+                <h2>🔏 봉인됨</h2>
+                <dl>
+                    <dt>SHA-256</dt><dd class="cc-mono">@_result.Sha256</dd>
+                    <dt>길이 · 크기</dt><dd>@TimeSpan.FromMilliseconds(_result.DurationMs).ToString(@"mm\:ss") · @(_result.Bytes / 1024) KB</dd>
+                    @if (_sealed is not null)
+                    {
+                        <dt>봉인 번호</dt><dd class="cc-mono">@_sealed.SealId</dd>
+                        <dt>봉인 시각</dt><dd>@_sealed.SealedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
+                        <dt>검증 링크</dt><dd><a href="/verify/@_sealed.SealId">@Nav.BaseUri.TrimEnd('/')/verify/@_sealed.SealId</a></dd>
+                    }
+                </dl>
+                <p class="cc-muted cc-small">녹화 파일은 이 브라우저에만 있고 지문(SHA-256)만 Axowl 에 봉인됐습니다. 파일을 내려받아 두세요 — 검증 페이지에 올리면 일치 여부가 나옵니다.</p>
+                <a class="cc-btn cc-btn-primary" href="@_result.DownloadUrl" download="@_result.FileName">녹화 파일 내려받기</a>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+    private Meeting? _meeting; private AxowlUser? _user; private JoinInfo? _join;
+    private List<Participant> _participants = new();
+    private string _name = ""; private string? _error;
+    private bool _busy, _joined, _isHost, _mic = true, _cam = true, _recording, _copied;
+    private RecordingResult? _result; private Meeting? _sealed;
+    private DotNetObjectReference<Room>? _ref;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _user = await Api.UserAsync();
+        var (m, err) = await Api.GetMeetingAsync(Id);
+        _meeting = m; _error = m is null ? (err ?? "회의를 찾을 수 없습니다.") : null;
+        StateHasChanged();
+    }
+
+    private async Task Join()
+    {
+        _busy = true; _error = null; StateHasChanged();
+        var (j, err) = await Api.JoinTokenAsync(Id, string.IsNullOrWhiteSpace(_name) ? "참가자" : _name.Trim());
+        if (j is null) { _error = err ?? "입장 토큰을 받지 못했습니다."; _busy = false; return; }
+        _join = j; _isHost = j.IsHost; _joined = true; StateHasChanged();
+        try
+        {
+            _ref = DotNetObjectReference.Create(this);
+            await (await Api.Js()).InvokeAsync<string>("joinRoom", "cc-grid", j.Url, j.Token, _ref);
+        }
+        catch (Exception ex) { _error = "영상 연결 실패: " + ex.Message; }
+        _busy = false; StateHasChanged();
+    }
+
+    [JSInvokable] public void OnParticipants(List<Participant> list) { _participants = list; StateHasChanged(); }
+
+    private async Task ToggleMic() { _mic = !_mic; await (await Api.Js()).InvokeVoidAsync("setMic", _mic); }
+    private async Task ToggleCam() { _cam = !_cam; await (await Api.Js()).InvokeVoidAsync("setCamera", _cam); }
+    private async Task CopyInvite() { _copied = await (await Api.Js()).InvokeAsync<bool>("copyText", Nav.Uri); StateHasChanged(); await Task.Delay(1500); _copied = false; }
+
+    private async Task StartRec()
+    {
+        try { await (await Api.Js()).InvokeAsync<string>("startRecording"); _recording = true; _error = null; }
+        catch (Exception ex) { _error = "녹화를 시작하지 못했습니다: " + ex.Message; }
+    }
+
+    private async Task StopRec()
+    {
+        _busy = true; StateHasChanged();
+        try
+        {
+            var js = await Api.Js();
+            _result = await js.InvokeAsync<RecordingResult>("stopRecording");
+            _recording = false;
+            var evId = await js.InvokeAsync<string?>("sendSealEvent", Id, _result.Sha256, _result.Bytes, _result.DurationMs);
+            var (sealedMeeting, err) = await Api.SealAsync(Id, _result.Sha256, _result.Bytes, _result.DurationMs, evId);
+            _sealed = sealedMeeting; if (sealedMeeting is null) _error = err ?? "봉인 기록에 실패했습니다.";
+            await js.InvokeVoidAsync("leaveRoom");
+        }
+        catch (Exception ex) { _error = "봉인 실패: " + ex.Message; }
+        _busy = false; StateHasChanged();
+    }
+
+    private async Task Leave()
+    {
+        await (await Api.Js()).InvokeVoidAsync("leaveRoom");
+        if (_isHost && _result is null) await Api.EndMeetingAsync(Id);
+        Nav.NavigateTo(_user is null ? "/" : "/meetings");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { if (_joined) await (await Api.Js()).InvokeVoidAsync("leaveRoom"); } catch { }
+        _ref?.Dispose();
+    }
+}

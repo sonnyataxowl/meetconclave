@@ -1,14 +1,39 @@
 @inherits LayoutComponentBase
+@using Conclave.Client.Services
+@inject ConclaveApi Api
 
 <div class="cc-shell">
     <header class="cc-header">
         <a class="cc-brand" href="@AppInfo.HomePath">@AppInfo.Name</a>
-        <nav class="cc-nav" aria-label="주 메뉴"></nav>
+        <nav class="cc-nav" aria-label="주 메뉴">
+            <a href="/meetings">내 회의</a>
+            <a href="/verify">검증</a>
+            @if (_user is null)
+            {
+                <button class="cc-link" @onclick="LoginMeetings">로그인</button>
+            }
+            else
+            {
+                <span class="cc-muted cc-small">@_user.Name</span>
+                <button class="cc-link" @onclick="Api.LogoutAsync">로그아웃</button>
+            }
+        </nav>
     </header>
     <main class="cc-main">
         @Body
     </main>
     <footer class="cc-footer">
-        <span>@AppInfo.Name · @AppInfo.Tagline</span>
+        <span>@AppInfo.Name · @AppInfo.Tagline · Secured by Axowl</span>
     </footer>
 </div>
+
+@code {
+    private AxowlUser? _user;
+    private Task LoginMeetings() => Api.LoginAsync("/meetings");
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _user = await Api.UserAsync();
+        StateHasChanged();
+    }
+}
