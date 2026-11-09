@@ -1,0 +1,89 @@
+# Axowl Fledgeplan 이 넣은 파일입니다 — Fledgeplan 에이전트를 이 저장소의 GitHub Actions 에서 돌립니다.
+#   🚨 저장소 코드를 받아 오지 않고(checkout 없음) 저장소 권한도 없습니다(id-token 하나 — Axowl 에 신원 증명용).
+#   🚨 Claude 자격은 환경 'fledgeplan' 의 비밀값 ANTHROPIC_API_KEY 또는 CLAUDE_CODE_OAUTH_TOKEN 에서만 읽습니다.
+#   🚨 Axowl 만 이 작업을 시작합니다(workflow_dispatch). 고칠 일이 있으면 Axowl 화면에서 다시 설치하세요.
+name: fledgeplan-agent
+run-name: "fledgeplan ${{ inputs.reason }} · ${{ inputs.run }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: Axowl run id
+        required: true
+        type: string
+      agent:
+        description: Agent badge
+        required: true
+        type: string
+      reason:
+        description: Why the agent was woken
+        required: true
+        type: string
+      story:
+        description: Story id (optional)
+        required: false
+        type: string
+        default: ""
+      attempt:
+        description: Attempt number
+        required: false
+        type: string
+        default: "1"
+
+permissions:
+  id-token: write
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    environment: fledgeplan
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run the Fledgeplan agent
+        env:
+          AXOWL_API: 'https://testapi.axowl.com'
+          AXOWL_RUN: ${{ inputs.run }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          WORK="$(mktemp -d)"; cd "$WORK"
+          oidc() {
+            curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=axowl-fledgeplan" \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).value||"")}catch{}})'
+          }
+          report() {
+            local id; id="$(oidc)" || true
+            node -e 'const fs=require("fs");const [run,kind,stop,file,code]=process.argv.slice(1);const rd=f=>{try{return fs.readFileSync(f,"utf8").slice(0,60000)}catch{return null}};process.stdout.write(JSON.stringify({run,kind,stopKind:stop||null,exitCode:code===""?null:Number(code),result:file?rd(file):null,stderr:rd("err-tail.txt")}))' \
+              "$AXOWL_RUN" "$1" "${2:-}" "${3:-}" "${4:-}" > report.json
+            curl -sS -X POST -H "Authorization: Bearer $id" -H "Content-Type: application/json" \
+              --data-binary @report.json "$AXOWL_API/mcp/github-oidc/report" > /dev/null || true
+          }
+          if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            echo "::error::No Claude credential. Add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN to this repository's 'fledgeplan' environment secrets."
+            report stop claude_credential_missing; exit 1
+          fi
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then unset CLAUDE_CODE_OAUTH_TOKEN; fi
+          ID="$(oidc)"
+          if [ -z "$ID" ]; then echo "::error::GitHub did not issue an identity token (id-token permission)."; exit 1; fi
+          STATUS="$(curl -sS -o token.json -w '%{http_code}' -X POST -H "Authorization: Bearer $ID" \
+            -H "Content-Type: application/json" -d "{\"run\":\"$AXOWL_RUN\"}" "$AXOWL_API/mcp/github-oidc/token")"
+          if [ "$STATUS" != "200" ]; then echo "::error::Axowl refused this run ($STATUS): $(head -c 500 token.json)"; exit 1; fi
+          TOKEN="$(node -e 'process.stdout.write(require("./token.json").access_token||"")')"
+          echo "::add-mask::$TOKEN"
+          node -e 'process.stdout.write(require("./token.json").prompt||"")' > prompt.txt
+          if ! npm install -g --no-fund --no-audit @anthropic-ai/claude-code@2.1.309 > npm.log 2>&1; then
+            tail -c 3000 npm.log > err-tail.txt
+            echo "::error::Could not install Claude Code."; report stop runner_failed; exit 1
+          fi
+          claude mcp add --transport http axowl "$AXOWL_API/mcp" --header "Authorization: Bearer $TOKEN" > /dev/null
+          claude -p "$(cat prompt.txt)" --allowedTools mcp__axowl --max-turns 60 --output-format json > result.json 2> err.txt
+          CODE=$?
+          tail -c 4000 err.txt > err-tail.txt
+          report finish "" result.json "$CODE"
+          if [ "$CODE" -ne 0 ]; then echo "::error::Claude stopped (exit $CODE). Axowl shows the reason on the app group."; exit 1; fi
