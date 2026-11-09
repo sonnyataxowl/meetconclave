@@ -47,6 +47,7 @@
             </div>
             <div class="cc-actions">
                 <button class="cc-btn" @onclick="CopyInvite">@(_copied ? "복사됨" : "초대 링크 복사")</button>
+                <a class="cc-btn" href="@MailTo" target="_blank" rel="noopener">이메일로 초대</a>
                 <button class="cc-btn" @onclick="ToggleMic">@(_mic ? "마이크 끄기" : "마이크 켜기")</button>
                 <button class="cc-btn" @onclick="ToggleCam">@(_cam ? "카메라 끄기" : "카메라 켜기")</button>
                 @if (_isHost && !_recording && _result is null) { <button class="cc-btn cc-btn-rec" @onclick="StartRec">녹화 시작</button> }
@@ -118,6 +119,14 @@
 
     private async Task ToggleMic() { _mic = !_mic; await (await Api.Js()).InvokeVoidAsync("setMic", _mic); }
     private async Task ToggleCam() { _cam = !_cam; await (await Api.Js()).InvokeVoidAsync("setCamera", _cam); }
+    private string MailTo => "mailto:?subject=" + Uri.EscapeDataString($"[Conclave] {_meeting?.Title} 회의 초대")
+        + "&body=" + Uri.EscapeDataString($"{_meeting?.HostName} 님이 회의에 초대했습니다.
+
+링크를 열고 이름만 입력하면 입장됩니다(가입 불필요):
+{Nav.Uri}
+
+이 회의의 녹화는 종료 시 지문이 Axowl 에 봉인되어 위변조 여부를 누구나 확인할 수 있습니다.");
+
     private async Task CopyInvite() { _copied = await (await Api.Js()).InvokeAsync<bool>("copyText", Nav.Uri); StateHasChanged(); await Task.Delay(1500); _copied = false; }
 
     private async Task StartRec()
