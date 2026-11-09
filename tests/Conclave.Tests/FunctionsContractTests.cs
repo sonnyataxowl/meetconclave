@@ -1,3 +1,5 @@
+using Xunit;
+
 namespace Conclave.Tests;
 
 public class FunctionsContractTests
