@@ -1,0 +1,14 @@
+@inherits LayoutComponentBase
+
+<div class="cc-shell">
+    <header class="cc-header">
+        <a class="cc-brand" href="@AppInfo.HomePath">@AppInfo.Name</a>
+        <nav class="cc-nav" aria-label="주 메뉴"></nav>
+    </header>
+    <main class="cc-main">
+        @Body
+    </main>
+    <footer class="cc-footer">
+        <span>@AppInfo.Name · @AppInfo.Tagline</span>
+    </footer>
+</div>
