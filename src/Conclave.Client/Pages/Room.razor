@@ -163,6 +163,7 @@
     {
         await (await Api.Js()).InvokeVoidAsync("leaveRoom");
         if (_isHost && _result is null) await Api.EndMeetingAsync(Id);
+        if (_sealed?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }   // 봉인 뒤 나가기 = 봉인 기록 화면으로
         Nav.NavigateTo(_user is null ? "/" : "/meetings");
     }
 
