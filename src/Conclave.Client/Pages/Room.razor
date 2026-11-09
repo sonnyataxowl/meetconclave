@@ -106,9 +106,11 @@
         try
         {
             _ref = DotNetObjectReference.Create(this);
-            await (await Api.Js()).InvokeAsync<string>("joinRoom", "cc-grid", j.Url, j.Token, _ref);
+            var media = await (await Api.Js()).InvokeAsync<string>("joinRoom", "cc-grid", j.Url, j.Token, _ref);
+            if (media == "mic-only") { _cam = false; _error = "카메라를 쓸 수 없어 음성만 켰습니다(주소창의 카메라 아이콘에서 허용 뒤 새로고침)."; }
+            else if (media.StartsWith("none")) { _cam = false; _mic = false; _error = "카메라·마이크 권한이 거부되어 참관으로 입장했습니다. 주소창의 카메라 아이콘에서 허용한 뒤 새로고침하세요."; }
         }
-        catch (Exception ex) { _error = "영상 연결 실패 — " + (ex.Message.Contains("invalid token") ? "LiveKit 키 설정을 확인해 주세요(시크릿 불일치)." : ex.Message.Split(" at ")[0]); }
+        catch (Exception ex) { var m = ex.Message ?? ""; _error = "영상 연결 실패 — " + (m.Contains("invalid token") ? "LiveKit 키 설정을 확인해 주세요(시크릿 불일치)." : m.Split(" at ")[0].Replace(" undefined", "")); }
         _busy = false; StateHasChanged();
     }
 

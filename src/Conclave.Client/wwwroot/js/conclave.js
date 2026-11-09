@@ -68,9 +68,16 @@ export async function joinRoom(gridId, url, lkToken, dotnetRef) {
   room.on(LK.RoomEvent.ParticipantConnected, () => notify());
   room.on(LK.RoomEvent.LocalTrackPublished, (pub) => { if (pub.track) attach(pub.track, room.localParticipant, true); });
   await room.connect(url, lkToken);
-  await room.localParticipant.enableCameraAndMicrophone();
+  // Camera/mic may be blocked (no device, denied, or an insecure context). Join anyway as a viewer and say what happened.
+  let media = 'both';
+  try { await room.localParticipant.enableCameraAndMicrophone(); }
+  catch (e1) {
+    try { await room.localParticipant.setMicrophoneEnabled(true); media = 'mic-only'; }
+    catch (e2) { media = 'none:' + ((e1 && e1.message) || e1); }
+  }
+  if (media !== 'both') tileFor(room.localParticipant, true);
   notify();
-  return room.localParticipant.identity;
+  return media;
 }
 
 function tileFor(participant, isLocal) {
