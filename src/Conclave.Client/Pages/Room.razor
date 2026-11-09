@@ -119,15 +119,20 @@
 
     private async Task ToggleMic() { _mic = !_mic; await (await Api.Js()).InvokeVoidAsync("setMic", _mic); }
     private async Task ToggleCam() { _cam = !_cam; await (await Api.Js()).InvokeVoidAsync("setCamera", _cam); }
-    private string MailTo => "mailto:?subject=" + Uri.EscapeDataString("[Conclave] " + (_meeting?.Title ?? "") + " 회의 초대 (회의 번호 " + Id + ")")
-        + "&body=" + Uri.EscapeDataString(string.Join(Environment.NewLine, new[] {
-            (_meeting?.HostName ?? "호스트") + " 님이 회의에 초대했습니다.",
+    // Invite mail opens Gmail compose signed in as the SAME account the host used for Conclave (authuser=email),
+    // so the sender is not whatever account the browser happens to default to. Falls back to mailto: when no email.
+    private string MailSubject => "[Conclave] " + (_meeting?.Title ?? "") + " 회의 초대 (회의 번호 " + Id + ")";
+    private string MailBody => string.Join(Environment.NewLine, new[] {
+            (_user?.Name ?? _meeting?.HostName ?? "호스트") + " 님이 회의에 초대했습니다.",
             "회의 번호: " + Id,
             "",
             "링크를 열고 이름만 입력하면 입장됩니다(가입 불필요):",
             Nav.Uri,
             "",
-            "이 회의의 녹화는 종료 시 지문이 Axowl 에 봉인되어 위변조 여부를 누구나 확인할 수 있습니다." }));
+            "이 회의의 녹화는 종료 시 지문이 Axowl 에 봉인되어 위변조 여부를 누구나 확인할 수 있습니다." });
+    private string MailTo => _user?.Email is { Length: > 0 } em
+        ? "https://mail.google.com/mail/?view=cm&fs=1&authuser=" + Uri.EscapeDataString(em) + "&su=" + Uri.EscapeDataString(MailSubject) + "&body=" + Uri.EscapeDataString(MailBody)
+        : "mailto:?subject=" + Uri.EscapeDataString(MailSubject) + "&body=" + Uri.EscapeDataString(MailBody);
 
     private async Task CopyInvite() { _copied = await (await Api.Js()).InvokeAsync<bool>("copyText", Nav.Uri); StateHasChanged(); await Task.Delay(1500); _copied = false; }
 
