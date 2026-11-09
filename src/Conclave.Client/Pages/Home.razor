@@ -1,8 +1,40 @@
 @page "/"
+@using Conclave.Client.Services
+@inject ConclaveApi Api
+@inject NavigationManager Nav
 
 <PageTitle>@AppInfo.Name</PageTitle>
 
 <section class="cc-home">
-    <h1>@AppInfo.Name</h1>
-    <p>@AppInfo.Tagline</p>
+    <h1>The meeting ends.<br />The record doesn't change.</h1>
+    <p>@AppInfo.Tagline — 녹화가 끝나는 순간 지문이 Axowl 에 봉인되고, 누구나 파일을 올려 확인할 수 있습니다.</p>
+    <div class="cc-row cc-center">
+        @if (_user is null)
+        {
+            <button class="cc-btn cc-btn-primary" @onclick="LoginMeetings">Axowl 로 로그인하고 회의 만들기</button>
+        }
+        else
+        {
+            <a class="cc-btn cc-btn-primary" href="/meetings">내 회의</a>
+        }
+        <a class="cc-btn" href="/verify">봉인 검증</a>
+    </div>
+    <ol class="cc-steps">
+        <li><strong>회의</strong> — 초대 링크 하나로 3명이 영상·음성으로 만납니다.</li>
+        <li><strong>봉인</strong> — 호스트가 녹화를 끝내면 브라우저가 SHA-256 지문을 계산해 Axowl 에 봉인합니다. 파일은 올라가지 않습니다.</li>
+        <li><strong>검증</strong> — 봉인 번호와 파일만 있으면 누구나 일치/불일치를 확인합니다.</li>
+    </ol>
 </section>
+
+@code {
+    private AxowlUser? _user;
+    private Task LoginMeetings() => Api.LoginAsync("/meetings");
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        var back = await Api.CompleteLoginAsync();
+        if (back is not null) { Nav.NavigateTo(back); return; }
+        _user = await Api.UserAsync();
+        StateHasChanged();
+    }
+}

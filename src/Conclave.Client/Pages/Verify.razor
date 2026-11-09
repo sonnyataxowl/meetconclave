@@ -1,0 +1,74 @@
+@page "/verify/{SealId}"
+@page "/verify"
+@using Conclave.Client.Services
+@inject ConclaveApi Api
+
+<PageTitle>봉인 검증 · @AppInfo.Name</PageTitle>
+
+<section class="cc-page cc-verify">
+    <h1>봉인 검증</h1>
+    <p class="cc-muted">회의 녹화 파일이 봉인 당시 그대로인지 누구나 확인할 수 있습니다. 파일은 이 브라우저 안에서만 읽히고 어디로도 전송되지 않습니다.</p>
+
+    @if (string.IsNullOrEmpty(SealId))
+    {
+        <form class="cc-row" @onsubmit="Go" @onsubmit:preventDefault>
+            <input class="cc-input" placeholder="봉인 번호" @bind="_input" />
+            <button class="cc-btn cc-btn-primary" type="submit">찾기</button>
+        </form>
+    }
+    else if (_info is null)
+    {
+        <p class="cc-muted">@(_error ?? "봉인 기록을 불러오는 중…")</p>
+    }
+    else
+    {
+        <div class="cc-card">
+            <h2>@_info.Title</h2>
+            <dl>
+                <dt>봉인 번호</dt><dd class="cc-mono">@_info.SealId</dd>
+                <dt>호스트</dt><dd>@_info.HostName</dd>
+                <dt>회의</dt><dd>@_info.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") → @_info.EndedAt?.ToLocalTime().ToString("HH:mm")</dd>
+                <dt>봉인 시각</dt><dd>@_info.SealedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
+                <dt>지문 (SHA-256)</dt><dd class="cc-mono">@_info.Sha256</dd>
+                <dt>크기 · 길이</dt><dd>@(_info.Bytes / 1024) KB · @TimeSpan.FromMilliseconds(_info.DurationMs).ToString(@"mm\:ss")</dd>
+                <dt>원장</dt><dd>Axowl · 조직 @_info.Org @(_info.AxowlEventId is null ? "" : $"· 이벤트 {_info.AxowlEventId}")</dd>
+            </dl>
+        </div>
+
+        <div class="cc-card">
+            <h3>파일 대조</h3>
+            <p class="cc-muted cc-small">녹화 파일을 고르면 브라우저가 SHA-256 을 계산해 위 지문과 비교합니다.</p>
+            <input id="cc-verify-file" type="file" class="cc-input" @onchange="Check" />
+            @if (_checking) { <p class="cc-muted">지문 계산 중…</p> }
+            @if (_match is true) { <div class="cc-result cc-ok">✅ 일치 — 봉인 이후 바뀌지 않았습니다.<div class="cc-mono cc-small">@_fileHash</div></div> }
+            @if (_match is false) { <div class="cc-result cc-bad">❌ 불일치 — 이 파일은 봉인된 녹화와 다릅니다.<div class="cc-mono cc-small">@_fileHash</div></div> }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public string? SealId { get; set; }
+    [Inject] NavigationManager Nav { get; set; } = default!;
+    private VerifyInfo? _info; private string? _error, _input, _fileHash; private bool _checking; private bool? _match;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _info = null; _match = null;
+        if (string.IsNullOrEmpty(SealId)) return;
+        var (v, err) = await Api.VerifyAsync(SealId);
+        _info = v; _error = v is null ? (err ?? "봉인 기록이 없습니다.") : null;
+    }
+
+    private void Go() { if (!string.IsNullOrWhiteSpace(_input)) Nav.NavigateTo($"/verify/{_input.Trim()}"); }
+
+    private async Task Check()
+    {
+        if (_info is null) return;
+        _checking = true; _match = null; StateHasChanged();
+        var h = await (await Api.Js()).InvokeAsync<FileHash?>("hashFileInput", "cc-verify-file");
+        _checking = false;
+        if (h is null) return;
+        _fileHash = h.Sha256;
+        _match = string.Equals(h.Sha256, _info.Sha256, StringComparison.OrdinalIgnoreCase);
+    }
+}

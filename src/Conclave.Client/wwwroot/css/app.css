@@ -63,3 +63,55 @@ a { color: var(--cc-accent); }
 }
 
 .cc-home p, .cc-notfound p { color: var(--cc-muted); }
+
+/* ── Conclave app (meetings · room · seal · verify) ── */
+.cc-nav { display:flex; gap:1rem; align-items:center; }
+.cc-nav a, .cc-link { color: var(--cc-muted); text-decoration:none; background:none; border:0; cursor:pointer; font:inherit; }
+.cc-nav a:hover, .cc-link:hover { color: var(--cc-text); }
+.cc-page { max-width: 56rem; margin: 0 auto; }
+.cc-page-head { display:flex; justify-content:space-between; align-items:baseline; }
+.cc-home h1 { font-size: 2.4rem; line-height:1.15; margin-bottom:.5rem; }
+.cc-steps { text-align:left; max-width:36rem; margin:2rem auto 0; color: var(--cc-muted); }
+.cc-steps li { margin:.5rem 0; }
+.cc-card { background: var(--cc-surface); border:1px solid var(--cc-border); border-radius:12px; padding:1.25rem; margin:1rem 0; }
+.cc-center { text-align:center; }
+.cc-row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+.cc-row.cc-center { justify-content:center; }
+.cc-input { flex:1; min-width:12rem; padding:.6rem .8rem; border-radius:8px; border:1px solid var(--cc-border); background:#0c0e12; color:var(--cc-text); font:inherit; }
+.cc-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem .9rem; border-radius:8px; border:1px solid var(--cc-border); background:#1d222c; color:var(--cc-text); text-decoration:none; cursor:pointer; font:inherit; font-size:.9rem; }
+.cc-btn:hover { background:#242a36; }
+.cc-btn:disabled { opacity:.6; cursor:default; }
+.cc-btn-primary { background: var(--cc-accent); border-color: var(--cc-accent); color:#0b0d12; font-weight:600; }
+.cc-btn-primary:hover { filter:brightness(1.08); background: var(--cc-accent); }
+.cc-btn-rec { background:#b91c1c; border-color:#b91c1c; color:#fff; }
+.cc-spinner { width:.9em; height:.9em; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; display:inline-block; animation:ccspin .7s linear infinite; }
+@keyframes ccspin { to { transform: rotate(360deg); } }
+.cc-error { color:#f87171; }
+.cc-muted { color: var(--cc-muted); }
+.cc-small { font-size:.8rem; }
+.cc-mono { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+.cc-list { list-style:none; padding:0; margin:1rem 0; }
+.cc-meeting { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+.cc-title { color: var(--cc-text); font-weight:600; text-decoration:none; font-size:1.05rem; }
+.cc-badge { display:inline-block; padding:.1rem .5rem; border-radius:999px; border:1px solid var(--cc-border); font-size:.72rem; color:var(--cc-muted); }
+.cc-badge-live { color:#34d399; border-color:#34d39966; }
+.cc-badge-sealed { color:#a78bfa; border-color:#a78bfa66; }
+.cc-badge-rec { color:#f87171; border-color:#f8717166; margin-left:.5rem; }
+.cc-actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+.cc-room { max-width: 72rem; margin:0 auto; }
+.cc-room-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+.cc-join { max-width: 32rem; margin: 3rem auto; }
+.cc-join .cc-input { margin: .75rem 0; width:100%; }
+.cc-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:.75rem; }
+.cc-tile { position:relative; background:#000; border-radius:12px; overflow:hidden; aspect-ratio:16/9; border:1px solid var(--cc-border); }
+.cc-tile-local { border-color: var(--cc-accent); }
+.cc-video { width:100%; height:100%; object-fit:cover; display:block; }
+.cc-tile-name { position:absolute; left:.5rem; bottom:.5rem; background:rgba(0,0,0,.55); padding:.15rem .5rem; border-radius:6px; font-size:.8rem; }
+.cc-sealed { border-color:#a78bfa66; }
+.cc-sealed dl, .cc-verify dl { display:grid; grid-template-columns: 9rem 1fr; gap:.35rem 1rem; margin:0; }
+.cc-sealed dt, .cc-verify dt { color: var(--cc-muted); }
+.cc-sealed dd, .cc-verify dd { margin:0; }
+.cc-result { margin-top:1rem; padding:.9rem 1rem; border-radius:10px; font-weight:600; }
+.cc-ok { background:#064e3b55; border:1px solid #34d39966; color:#6ee7b7; }
+.cc-bad { background:#7f1d1d55; border:1px solid #f8717166; color:#fca5a5; }
+@media (max-width: 640px) { .cc-sealed dl, .cc-verify dl { grid-template-columns: 1fr; } .cc-home h1 { font-size:1.8rem; } }
