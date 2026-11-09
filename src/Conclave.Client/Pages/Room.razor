@@ -41,7 +41,7 @@
     {
         <div class="cc-room-head">
             <div>
-                <strong>@_meeting.Title</strong>
+                <strong>@_meeting.Title</strong> <span class="cc-mono cc-muted cc-small">회의 번호 @Id</span>
                 <span class="cc-muted cc-small"> · 참가자 @_participants.Count 명 @(_isHost ? "· 호스트" : "")</span>
                 @if (_recording) { <span class="cc-badge cc-badge-rec">● 녹화 중</span> }
             </div>
@@ -119,13 +119,16 @@
 
     private async Task ToggleMic() { _mic = !_mic; await (await Api.Js()).InvokeVoidAsync("setMic", _mic); }
     private async Task ToggleCam() { _cam = !_cam; await (await Api.Js()).InvokeVoidAsync("setCamera", _cam); }
-    private string MailTo => "mailto:?subject=" + Uri.EscapeDataString($"[Conclave] {_meeting?.Title} 회의 초대")
-        + "&body=" + Uri.EscapeDataString($"{_meeting?.HostName} 님이 회의에 초대했습니다.
-
-링크를 열고 이름만 입력하면 입장됩니다(가입 불필요):
-{Nav.Uri}
-
-이 회의의 녹화는 종료 시 지문이 Axowl 에 봉인되어 위변조 여부를 누구나 확인할 수 있습니다.");
+    private string MailTo => "mailto:?subject=" + Uri.EscapeDataString("[Conclave] " + (_meeting?.Title ?? "") + " 회의 초대 (회의 번호 " + Id + ")")
+        + "&body=" + Uri.EscapeDataString(string.Join("
+", new[] {
+            (_meeting?.HostName ?? "호스트") + " 님이 회의에 초대했습니다.",
+            "회의 번호: " + Id,
+            "",
+            "링크를 열고 이름만 입력하면 입장됩니다(가입 불필요):",
+            Nav.Uri,
+            "",
+            "이 회의의 녹화는 종료 시 지문이 Axowl 에 봉인되어 위변조 여부를 누구나 확인할 수 있습니다." }));
 
     private async Task CopyInvite() { _copied = await (await Api.Js()).InvokeAsync<bool>("copyText", Nav.Uri); StateHasChanged(); await Task.Delay(1500); _copied = false; }
 
