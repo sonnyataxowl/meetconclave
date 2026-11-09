@@ -115,3 +115,22 @@ a { color: var(--cc-accent); }
 .cc-ok { background:#064e3b55; border:1px solid #34d39966; color:#6ee7b7; }
 .cc-bad { background:#7f1d1d55; border:1px solid #f8717166; color:#fca5a5; }
 @media (max-width: 640px) { .cc-sealed dl, .cc-verify dl { grid-template-columns: 1fr; } .cc-home h1 { font-size:1.8rem; } }
+
+/* pricing */
+.cc-plans { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:1rem; margin-top:1rem; }
+.cc-plan h2 { margin:0 0 .25rem; }
+.cc-plan-pro { border-color: var(--cc-accent); }
+.cc-price { font-size:2rem; font-weight:700; margin:.25rem 0 .75rem; }
+.cc-plan ul { padding-left:1.1rem; color: var(--cc-muted); margin:0 0 1rem; }
+.cc-plan ul li { margin:.3rem 0; }
+/* mobile */
+@media (max-width: 640px) {
+  .cc-header { padding:.6rem .9rem; }
+  .cc-nav { gap:.6rem; font-size:.9rem; }
+  .cc-main { padding:1rem .9rem; }
+  .cc-room-head { flex-direction:column; align-items:stretch; }
+  .cc-actions .cc-btn { flex:1 1 45%; justify-content:center; }
+  .cc-meeting { flex-direction:column; align-items:stretch; }
+  .cc-grid { grid-template-columns: 1fr; }
+  .cc-tile { aspect-ratio: 4/3; }
+}

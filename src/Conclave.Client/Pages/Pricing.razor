@@ -1,0 +1,62 @@
+@page "/pricing"
+@using Conclave.Client.Services
+@inject ConclaveApi Api
+@inject NavigationManager Nav
+
+<PageTitle>요금 · @AppInfo.Name</PageTitle>
+
+<section class="cc-page cc-pricing">
+    <h1>요금</h1>
+    <p class="cc-muted">참가는 누구나 무료. 회의를 열고 기록을 봉인하는 호스트만 Pro 입니다. 결제와 구독 관리는 Axowl 이 맡습니다.</p>
+
+    @if (Paid) { <div class="cc-result cc-ok">✅ 결제가 접수되었습니다. Axowl 이 구독을 확인하는 대로 Pro 가 켜집니다.</div> }
+
+    <div class="cc-plans">
+        <div class="cc-card cc-plan">
+            <h2>Free</h2>
+            <div class="cc-price">$0</div>
+            <ul>
+                <li>초대 링크로 회의 참가</li>
+                <li>영상·음성·마이크/카메라 토글</li>
+                <li>봉인 검증 페이지 무제한</li>
+            </ul>
+            <a class="cc-btn" href="/verify">검증해 보기</a>
+        </div>
+        <div class="cc-card cc-plan cc-plan-pro">
+            <h2>Pro <span class="cc-badge cc-badge-sealed">호스트</span></h2>
+            <div class="cc-price">$10 <span class="cc-muted cc-small">/ 월</span></div>
+            <ul>
+                <li>회의 만들기·초대 (3인)</li>
+                <li>호스트 녹화 → SHA-256 지문 봉인</li>
+                <li>봉인 기록 Axowl 원장 보관</li>
+            </ul>
+            <button class="cc-btn cc-btn-primary" @onclick="Subscribe" disabled="@_busy">
+                @if (_busy) { <span class="cc-spinner"></span> } @(_user is null ? "로그인하고 Pro 시작" : "Pro 구독 — Axowl 결제")
+            </button>
+            @if (_error is not null) { <p class="cc-error">@_error</p> }
+            <p class="cc-muted cc-small">결제 창은 Axowl 이 엽니다(카드 정보는 Conclave 에 저장되지 않습니다).</p>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "paid")] public bool Paid { get; set; }
+    private AxowlUser? _user; private bool _busy; private string? _error;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (!first) return;
+        _user = await Api.UserAsync();
+        StateHasChanged();
+    }
+
+    private async Task Subscribe()
+    {
+        if (_user is null) { await Api.LoginAsync("/pricing"); return; }
+        _busy = true; _error = null;
+        var (url, err) = await Api.CheckoutAsync("plan.pro", "monthly", Nav.BaseUri.TrimEnd('/') + "/pricing?paid=true");
+        _busy = false;
+        if (url is null) { _error = err ?? "결제 창을 열지 못했습니다."; return; }
+        Nav.NavigateTo(url, forceLoad: true);
+    }
+}

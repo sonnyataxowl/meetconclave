@@ -53,6 +53,28 @@ public sealed class ConclaveApi(HttpClient http, IJSRuntime js) : IAsyncDisposab
         => SendAsync<Meeting>(HttpMethod.Post, $"/api/meetings/{id}/seal", new { sha256, bytes, durationMs, axowlEventId });
     public Task<(VerifyInfo? Value, string? Error)> VerifyAsync(string sealId) => SendAsync<VerifyInfo>(HttpMethod.Get, $"/api/verify/{sealId}");
 
+    /// <summary>Axowl app-member checkout — Axowl opens the payment page; returns the URL to send the member to.</summary>
+    public async Task<(string? Url, string? Error)> CheckoutAsync(string productKey, string billingCycle, string returnUrl)
+    {
+        try
+        {
+            var t = await (await Js()).InvokeAsync<string?>("token");
+            if (string.IsNullOrEmpty(t)) return (null, "로그인이 필요합니다.");
+            var r = new HttpRequestMessage(HttpMethod.Post, "https://testapi.axowl.com/api/public/apps/client_6f8eb765181d45ff938e/checkout");
+            r.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t);
+            r.Content = JsonContent.Create(new { productKey, billingCycle, returnUrl });
+            using var res = await http.SendAsync(r);
+            var text = await res.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(text).RootElement;
+            if (!res.IsSuccessStatusCode)
+                return (null, (doc.TryGetProperty("detail", out var d) ? d.GetString() : null) ?? (doc.TryGetProperty("error", out var e) ? e.GetString() : null) ?? $"HTTP {(int)res.StatusCode}");
+            if (doc.TryGetProperty("redirectUrl", out var ru) && ru.ValueKind == JsonValueKind.String) return (ru.GetString(), null);
+            if (doc.TryGetProperty("payUrl", out var pu) && pu.ValueKind == JsonValueKind.String) return (pu.GetString(), null);
+            return (null, "결제 주소가 없습니다.");
+        }
+        catch (Exception ex) { return (null, ex.Message); }
+    }
+
     public async ValueTask DisposeAsync() { if (_mod is not null) await _mod.DisposeAsync(); }
 }
 
