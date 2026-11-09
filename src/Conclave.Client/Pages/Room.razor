@@ -9,7 +9,18 @@
 <section class="cc-room">
     @if (_meeting is null)
     {
-        <p class="cc-muted">@(_error ?? "회의를 불러오는 중…")</p>
+        @if (!_loaded)
+        {
+            <p class="cc-muted">회의를 불러오는 중…</p>
+        }
+        else
+        {
+            <div class="cc-card cc-center cc-missing">
+                <h1>회의를 찾을 수 없습니다</h1>
+                <p class="cc-muted">@(_error ?? "초대 링크가 올바른지 확인해 주세요.")</p>
+                <a class="cc-btn" href="@AppInfo.HomePath">홈으로</a>
+            </div>
+        }
     }
     else if (_meeting.SealId is not null)
     {
@@ -19,20 +30,30 @@
             <a class="cc-btn cc-btn-primary" href="/verify/@_meeting.SealId">봉인 확인</a>
         </div>
     }
+    else if (_meeting.EndedAt is not null && !_joined)
+    {
+        <div class="cc-card cc-center cc-ended">
+            <h1>@_meeting.Title</h1>
+            <p>이 회의는 이미 종료되어 입장할 수 없습니다.</p>
+            <a class="cc-btn" href="@AppInfo.HomePath">홈으로</a>
+        </div>
+    }
     else if (!_joined)
     {
         <div class="cc-card cc-center cc-join">
             <h1>@_meeting.Title</h1>
             <p class="cc-muted">호스트 @_meeting.HostName · 입장하면 카메라·마이크를 켭니다</p>
-            @if (_user is null)
-            {
-                <input class="cc-input" placeholder="표시할 이름" @bind="_name" maxlength="40" />
-            }
             <div class="cc-row cc-center">
-                <button class="cc-btn cc-btn-primary" @onclick="Join" disabled="@_busy">
-                    @if (_busy) { <span class="cc-spinner"></span> } 입장
-                </button>
-                @if (_user is null) { <button class="cc-btn" @onclick="() => Api.LoginAsync(Nav.ToBaseRelativePath(Nav.Uri))">Axowl 로 로그인</button> }
+                @if (_user is null)
+                {
+                    <button class="cc-btn cc-btn-primary" @onclick="LoginToJoin">Axowl 로 로그인하고 입장</button>
+                }
+                else
+                {
+                    <button class="cc-btn cc-btn-primary" @onclick="Join" disabled="@_busy">
+                        @if (_busy) { <span class="cc-spinner"></span> } 입장
+                    </button>
+                }
             </div>
             @if (_error is not null) { <p class="cc-error">@_error</p> }
         </div>
@@ -83,8 +104,8 @@
     [Parameter] public string Id { get; set; } = "";
     private Meeting? _meeting; private AxowlUser? _user; private JoinInfo? _join;
     private List<Participant> _participants = new();
-    private string _name = ""; private string? _error;
-    private bool _busy, _joined, _isHost, _mic = true, _cam = true, _recording, _copied;
+    private string? _error;
+    private bool _busy, _joined, _loaded, _isHost, _mic = true, _cam = true, _recording, _copied;
     private RecordingResult? _result; private Meeting? _sealed;
     private DotNetObjectReference<Room>? _ref;
 
@@ -93,15 +114,25 @@
         if (!first) return;
         _user = await Api.UserAsync();
         var (m, err) = await Api.GetMeetingAsync(Id);
-        _meeting = m; _error = m is null ? (err ?? "회의를 찾을 수 없습니다.") : null;
+        _meeting = m; _error = m is null ? (err == "not_found" ? null : err) : null; _loaded = true;
         StateHasChanged();
+        // Invite link: a signed-in visitor goes straight into an open meeting.
+        if (m is not null && _user is not null && m.SealId is null && m.EndedAt is null) await Join();
     }
+
+    // Come back to this room after the hosted login; the room then auto-joins.
+    private Task LoginToJoin() => Api.LoginAsync("/" + Nav.ToBaseRelativePath(Nav.Uri));
 
     private async Task Join()
     {
         _busy = true; _error = null; StateHasChanged();
-        var (j, err) = await Api.JoinTokenAsync(Id, string.IsNullOrWhiteSpace(_name) ? "참가자" : _name.Trim());
-        if (j is null) { _error = err ?? "입장 토큰을 받지 못했습니다."; _busy = false; return; }
+        var (j, err) = await Api.JoinTokenAsync(Id, _user?.Name ?? "참가자");
+        if (j is null)
+        {
+            _error = err ?? "입장 토큰을 받지 못했습니다.";
+            if (err is not null && err.Contains("끝났")) _meeting = _meeting! with { EndedAt = DateTimeOffset.UtcNow };
+            _busy = false; StateHasChanged(); return;
+        }
         _join = j; _isHost = j.IsHost; _joined = true; StateHasChanged();
         try
         {
