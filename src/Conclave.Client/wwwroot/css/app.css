@@ -1,0 +1,65 @@
+:root {
+    color-scheme: dark;
+    --cc-bg: #0f1115;
+    --cc-surface: #171a21;
+    --cc-border: #262b36;
+    --cc-text: #e6e8ee;
+    --cc-muted: #9aa3b2;
+    --cc-accent: #7c9cff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--cc-bg);
+    color: var(--cc-text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+    line-height: 1.5;
+}
+
+a { color: var(--cc-accent); }
+
+.cc-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.cc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.5rem;
+    background: var(--cc-surface);
+    border-bottom: 1px solid var(--cc-border);
+}
+
+.cc-brand {
+    color: var(--cc-text);
+    font-weight: 700;
+    font-size: 1.15rem;
+    text-decoration: none;
+}
+
+.cc-main {
+    flex: 1;
+    padding: 2rem 1.5rem;
+}
+
+.cc-footer {
+    padding: 0.75rem 1.5rem;
+    background: var(--cc-surface);
+    border-top: 1px solid var(--cc-border);
+    color: var(--cc-muted);
+    font-size: 0.875rem;
+}
+
+.cc-home, .cc-notfound {
+    max-width: 40rem;
+    margin: 3rem auto;
+    text-align: center;
+}
+
+.cc-home p, .cc-notfound p { color: var(--cc-muted); }
