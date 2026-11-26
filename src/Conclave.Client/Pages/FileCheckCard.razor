@@ -1,0 +1,62 @@
+@using Conclave.Client.Services
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+<div class="cc-card">
+    <h3>파일 대조</h3>
+    <p class="cc-muted cc-small">녹화 파일을 고르면 브라우저가 SHA-256 을 계산해 위 지문과 비교합니다. 파일은 서버로 보내지 않습니다.</p>
+    <input id="cc-verify-file" type="file" class="cc-input" disabled="@_checking" @onchange="Check" />
+    @if (_checking)
+    {
+        <p class="cc-muted cc-small">지문 계산 중… @_percent% (@(_done / 1024 / 1024) / @(_total / 1024 / 1024) MB)</p>
+        <progress class="cc-progress" max="100" value="@_percent" style="width:100%"></progress>
+    }
+    @if (_fileError is not null) { <div class="cc-result cc-bad">파일을 읽지 못했습니다: @_fileError</div> }
+    @if (_outcome is { Match: true }) { <div class="cc-result cc-ok">✅ 일치 — 봉인 이후 바뀌지 않았습니다.<div class="cc-mono cc-small">@_fileHash</div></div> }
+    @if (_outcome is { Match: false })
+    {
+        <div class="cc-result cc-bad">❌ 불일치 — 이 파일은 봉인된 녹화와 다릅니다.@(_outcome.SizeDiffers ? " (크기도 다릅니다)" : "")<div class="cc-mono cc-small">@_fileHash</div></div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string SealedSha256 { get; set; } = "";
+    [Parameter] public long SealedBytes { get; set; }
+
+    private string? _fileHash, _fileError;
+    private bool _checking; private FileCheckOutcome? _outcome;
+    private long _done, _total; private int _percent;
+    private IJSObjectReference? _mod;
+    private DotNetObjectReference<FileCheckCard>? _self;
+
+    [JSInvokable]
+    public Task OnHashProgress(long done, long total)
+    {
+        _done = done; _total = total; _percent = FileCheck.Percent(done, total);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Check()
+    {
+        if (_checking) return;
+        _checking = true; _outcome = null; _fileError = null; _fileHash = null; _done = _total = 0; _percent = 0;
+        StateHasChanged();
+        try
+        {
+            _mod ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/verify-file.js");
+            _self ??= DotNetObjectReference.Create(this);
+            var h = await _mod.InvokeAsync<FileHash?>("hashFileInput", "cc-verify-file", _self);
+            if (h is null) return;
+            _fileHash = h.Sha256;
+            _outcome = FileCheck.Compare(SealedSha256, SealedBytes, h.Sha256, h.Bytes);
+        }
+        catch (Exception ex) { _fileError = ex.Message; }
+        finally { _checking = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _self?.Dispose();
+        if (_mod is not null) { try { await _mod.DisposeAsync(); } catch (JSDisconnectedException) { } }
+    }
+}
