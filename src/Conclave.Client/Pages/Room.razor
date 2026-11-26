@@ -203,7 +203,7 @@
             if (_card is null && sealedMeeting?.SealId is { Length: > 0 } sid)
                 _card = new SealCard(r.Sha256, sid, sealedMeeting.SealedAt, r.Bytes, r.DurationMs);
             if (_card is null) { _error = err ?? "봉인 기록에 실패했습니다."; _phase = SealPhase.Failed; }
-            else { _meeting = sealedMeeting; _phase = SealPhase.Sealed; await js.InvokeVoidAsync("leaveRoom"); }
+            else { _phase = SealPhase.Sealed; await js.InvokeVoidAsync("leaveRoom"); }
         }
         catch (Exception ex) { _error = "봉인 실패: " + ex.Message; _phase = SealPhase.Failed; }
         _busy = false; StateHasChanged();
