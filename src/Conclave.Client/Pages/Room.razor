@@ -16,6 +16,13 @@
         <div class="cc-card cc-center">
             <h1>@_meeting.Title</h1>
             <p>이 회의는 끝났고 기록이 봉인되었습니다.</p>
+            @if (SealCard.From(_meeting) is { } restored)
+            {
+                <div class="cc-card cc-sealed">
+                    <h2>🔏 봉인됨</h2>
+                    @CardBody(restored)
+                </div>
+            }
             <a class="cc-btn cc-btn-primary" href="/verify/@_meeting.SealId">봉인 확인</a>
         </div>
     }
@@ -51,8 +58,8 @@
                 <button class="cc-btn" @onclick="ToggleMic">@(_mic ? "마이크 끄기" : "마이크 켜기")</button>
                 <button class="cc-btn" @onclick="ToggleCam">@(_cam ? "카메라 끄기" : "카메라 켜기")</button>
                 @if (_isHost && !_recording && _result is null) { <button class="cc-btn cc-btn-rec" @onclick="StartRec">녹화 시작</button> }
-                @if (_isHost && _recording) { <button class="cc-btn cc-btn-rec" @onclick="StopRec" disabled="@_busy">@(_busy ? "지문 계산 중…" : "녹화 종료 → 봉인")</button> }
-                @if (_isHost) { <button class="cc-btn" @onclick="EndMeeting" disabled="@_recording">회의 종료</button> }
+                @if (_isHost && _recording) { <button class="cc-btn cc-btn-rec" @onclick="StopRec" disabled="@_busy">@(_busy ? SealFlow.Status(_phase) : "녹화 종료 → 봉인")</button> }
+                @if (_isHost) { <button class="cc-btn" @onclick="EndMeeting" disabled="@(_recording || _busy)">회의 종료</button> }
                 <button class="cc-btn" @onclick="Leave">@(_isHost ? "나가기(회의는 유지)" : "나가기")</button>
             </div>
         </div>
@@ -60,20 +67,27 @@
 
         <div id="cc-grid" class="cc-grid"></div>
 
-        @if (_result is not null)
+        @if (SealFlow.IsWorking(_phase))
+        {
+            <div class="cc-card cc-center"><span class="cc-spinner"></span> @SealFlow.Status(_phase)</div>
+        }
+
+        @if (SealFlow.CanRetry(_phase, _result?.Sha256))
+        {
+            <div class="cc-card cc-center">
+                <p class="cc-error">@SealFlow.Status(_phase) — 지문은 계산되어 있습니다. 다시 시도하면 같은 지문으로 봉인을 요청합니다.</p>
+                <p class="cc-mono cc-small">@_result!.Sha256</p>
+                <button class="cc-btn cc-btn-primary" @onclick="RetrySeal">봉인 다시 시도</button>
+                <p class="cc-muted cc-small">이 화면을 새로고침하면 지문이 사라지니, 먼저 아래 파일을 내려받아 두세요.</p>
+                <a class="cc-btn" href="@_result.DownloadUrl" download="@_result.FileName">녹화 파일 내려받기</a>
+            </div>
+        }
+
+        @if (_result is not null && _card is not null)
         {
             <div class="cc-card cc-sealed">
                 <h2>🔏 봉인됨</h2>
-                <dl>
-                    <dt>SHA-256</dt><dd class="cc-mono">@_result.Sha256</dd>
-                    <dt>길이 · 크기</dt><dd>@TimeSpan.FromMilliseconds(_result.DurationMs).ToString(@"mm\:ss") · @(_result.Bytes / 1024) KB</dd>
-                    @if (_sealed is not null)
-                    {
-                        <dt>봉인 번호</dt><dd class="cc-mono">@_sealed.SealId</dd>
-                        <dt>봉인 시각</dt><dd>@_sealed.SealedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
-                        <dt>검증 링크</dt><dd><a href="/verify/@_sealed.SealId">@Nav.BaseUri.TrimEnd('/')/verify/@_sealed.SealId</a></dd>
-                    }
-                </dl>
+                @CardBody(_card)
                 <p class="cc-muted cc-small">녹화 파일은 이 브라우저에만 있고 지문(SHA-256)만 Axowl 에 봉인됐습니다. 파일을 내려받아 두세요 — 검증 페이지에 올리면 일치 여부가 나옵니다.</p>
                 <a class="cc-btn cc-btn-primary" href="@_result.DownloadUrl" download="@_result.FileName">녹화 파일 내려받기</a>
             </div>
@@ -87,8 +101,20 @@
     private List<Participant> _participants = new();
     private string _name = ""; private string? _error;
     private bool _busy, _joined, _isHost, _mic = true, _cam = true, _recording, _copied;
-    private RecordingResult? _result; private Meeting? _sealed;
+    private RecordingResult? _result; private SealCard? _card;
+    private SealPhase _phase = SealPhase.Idle;
     private DotNetObjectReference<Room>? _ref;
+
+    private RenderFragment CardBody(SealCard c) => @<dl>
+        <dt>SHA-256</dt><dd class="cc-mono">@c.Sha256</dd>
+        @if (c.DurationMs is { } ms && c.Bytes is { } by)
+        {
+            <dt>길이 · 크기</dt><dd>@TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss") · @(by / 1024) KB</dd>
+        }
+        <dt>봉인 번호</dt><dd class="cc-mono">@c.SealId</dd>
+        <dt>봉인 시각</dt><dd>@c.SealedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
+        <dt>검증 링크</dt><dd><a href="@c.VerifyPath">@Nav.BaseUri.TrimEnd('/')@c.VerifyPath</a></dd>
+    </dl>;
 
     protected override async Task OnAfterRenderAsync(bool first)
     {
@@ -139,24 +165,47 @@
 
     private async Task StartRec()
     {
-        try { await (await Api.Js()).InvokeAsync<string>("startRecording"); _recording = true; _error = null; }
+        try { await (await Api.Js()).InvokeAsync<string>("startRecording"); _recording = true; _phase = SealPhase.Recording; _error = null; }
         catch (Exception ex) { _error = "녹화를 시작하지 못했습니다: " + ex.Message; }
     }
 
     private async Task StopRec()
     {
-        _busy = true; StateHasChanged();
+        _busy = true; _error = null; _phase = SealPhase.Hashing; StateHasChanged();
         try
         {
             var js = await Api.Js();
             _result = await js.InvokeAsync<RecordingResult>("stopRecording");
             _recording = false;
-            var evId = await js.InvokeAsync<string?>("sendSealEvent", Id, _result.Sha256, _result.Bytes, _result.DurationMs);
-            var (sealedMeeting, err) = await Api.SealAsync(Id, _result.Sha256, _result.Bytes, _result.DurationMs, evId);
-            _sealed = sealedMeeting; if (sealedMeeting is null) _error = err ?? "봉인 기록에 실패했습니다.";
-            await js.InvokeVoidAsync("leaveRoom");
         }
-        catch (Exception ex) { _error = "봉인 실패: " + ex.Message; }
+        catch (Exception ex) { _error = "녹화 종료 실패: " + ex.Message; _phase = SealPhase.Idle; _busy = false; StateHasChanged(); return; }
+        await SealAsync();
+    }
+
+    private async Task RetrySeal()
+    {
+        if (!SealFlow.CanRetry(_phase, _result?.Sha256)) return;
+        _busy = true; _error = null; StateHasChanged();
+        await SealAsync();
+    }
+
+    // Sends the already computed fingerprint; on failure keeps it so the host can retry without re-recording.
+    private async Task SealAsync()
+    {
+        var r = _result!;
+        _phase = SealPhase.Sealing; _busy = true; StateHasChanged();
+        try
+        {
+            var js = await Api.Js();
+            var evId = await js.InvokeAsync<string?>("sendSealEvent", Id, r.Sha256, r.Bytes, r.DurationMs);
+            var (sealedMeeting, err) = await Api.SealAsync(Id, r.Sha256, r.Bytes, r.DurationMs, evId);
+            _card = SealCard.From(sealedMeeting);
+            if (_card is null && sealedMeeting?.SealId is { Length: > 0 } sid)
+                _card = new SealCard(r.Sha256, sid, sealedMeeting.SealedAt, r.Bytes, r.DurationMs);
+            if (_card is null) { _error = err ?? "봉인 기록에 실패했습니다."; _phase = SealPhase.Failed; }
+            else { _meeting = sealedMeeting; _phase = SealPhase.Sealed; await js.InvokeVoidAsync("leaveRoom"); }
+        }
+        catch (Exception ex) { _error = "봉인 실패: " + ex.Message; _phase = SealPhase.Failed; }
         _busy = false; StateHasChanged();
     }
 
@@ -164,14 +213,14 @@
     {
         await (await Api.Js()).InvokeVoidAsync("leaveRoom");
         await Api.EndMeetingAsync(Id);
-        if (_sealed?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }
+        if (_card?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }
         Nav.NavigateTo("/meetings");
     }
 
     private async Task Leave()
     {
         await (await Api.Js()).InvokeVoidAsync("leaveRoom");
-        if (_sealed?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }   // 봉인 뒤 나가기 = 봉인 기록 화면으로
+        if (_card?.SealId is { } sid) { Nav.NavigateTo($"/verify/{sid}"); return; }   // 봉인 뒤 나가기 = 봉인 기록 화면으로
         Nav.NavigateTo(_user is null ? "/" : "/meetings");
     }
 
