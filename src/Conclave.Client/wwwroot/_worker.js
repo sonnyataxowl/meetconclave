@@ -1,10 +1,12 @@
 // Conclave — Cloudflare Pages advanced-mode worker (no npm dependencies).
 //   /api/*  → meetings, LiveKit tokens, recording seals, public verification
 //   else    → static Blazor WebAssembly assets (SPA fallback to /index.html)
-// Secrets (Pages → Settings → Variables and secrets): DATABASE_URL, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+// Secrets (Pages → Settings → Variables and secrets): DATABASE_URL, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, AXOWL_API_KEY
+// Optional: AXOWL_API_BASE (defaults to AXOWL_API below).
 
 const AXOWL_API = 'https://testapi.axowl.com';
 const AXOWL_ORG = 'hackertones';
+const AXOWL_CLIENT = 'client_6f8eb765181d45ff938e';
 const JWKS_URL = `${AXOWL_API}/api/public/orgs/${AXOWL_ORG}/.well-known/jwks.json`;
 
 export default {
@@ -111,7 +113,39 @@ async function api(request, url, env) {
       sealedAt: iso(r.sealed_at), axowlEventId: r.axowl_event_id, ledger: 'axowl', org: AXOWL_ORG });
   }
 
+  // Public (no sign-in): what Axowl's audit ledger recorded for this seal's event. The page compares it with the row above;
+  // the org API key stays here, only the ledger's own fields go back to the browser.
+  mm = p.match(/^\/api\/verify\/([A-Za-z0-9_-]{4,40})\/ledger$/);
+  if (mm && m === 'GET') {
+    await ensureSchema(env);
+    const rows = await sql(env, 'select axowl_event_id from conclave_meetings where seal_id=$1', [mm[1]]);
+    if (!rows.length) return json({ error: 'not_found' }, 404);
+    const eventId = rows[0].axowl_event_id;
+    if (!eventId || String(eventId).startsWith('pending:')) return json({ error: 'no_ledger_event', detail: '이 봉인에는 Axowl 원장 이벤트 번호가 없습니다.' }, 404);
+    return readLedgerEvent(env, String(eventId));
+  }
+
   return json({ error: 'not_found' }, 404);
+}
+
+// GET {AXOWL_API_BASE}/api/public/apps/{client}/ledger/events/{id}  (docs: guides/seal-anything §2). Any failure becomes a 502/404 the page
+// shows as '확인 불가' — a failed call is never turned into a verdict about the record.
+async function readLedgerEvent(env, eventId) {
+  if (!env.AXOWL_API_KEY) return json({ error: 'ledger_not_configured', detail: 'AXOWL_API_KEY 시크릿이 설정되지 않았습니다.' }, 503);
+  const base = String(env.AXOWL_API_BASE || AXOWL_API).replace(/\/+$/, '');
+  let res;
+  try {
+    res = await fetch(`${base}/api/public/apps/${AXOWL_CLIENT}/ledger/events/${encodeURIComponent(eventId)}`, {
+      headers: { 'X-Api-Key': env.AXOWL_API_KEY },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) { return json({ error: 'ledger_unavailable', detail: 'Axowl 에 연결하지 못했습니다.' }, 502); }
+  if (res.status === 404) return json({ error: 'ledger_event_not_found', detail: 'Axowl 원장에 이 이벤트가 없습니다.' }, 404);
+  if (!res.ok) return json({ error: 'ledger_unavailable', detail: `Axowl 응답 HTTP ${res.status}` }, 502);
+  const d = await res.json().catch(() => null);
+  if (!d || typeof d !== 'object') return json({ error: 'ledger_unavailable', detail: 'Axowl 응답을 읽지 못했습니다.' }, 502);
+  return json({ eventId: d.id || eventId, type: d.type || null, subjectId: d.subjectId || null, sha256: d.sha256 ? String(d.sha256).toLowerCase() : null,
+    sealed: d.sealed === true, integrity: d.integrity || null, source: d.source || null, createdAt: iso(d.createdAt) });
 }
 
 // Neon HTTP returns timestamptz as '2026-11-09 03:20:01.12+00' — .NET wants ISO-8601, so normalize here.
