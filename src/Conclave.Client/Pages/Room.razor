@@ -66,7 +66,7 @@
                 <h2>🔏 봉인됨</h2>
                 <dl>
                     <dt>SHA-256</dt><dd class="cc-mono">@_result.Sha256</dd>
-                    <dt>길이 · 크기</dt><dd>@TimeSpan.FromMilliseconds(_result.DurationMs).ToString(@"mm\:ss") · @(_result.Bytes / 1024) KB</dd>
+                    <dt>길이 · 크기</dt><dd>@TimeSpan.FromMilliseconds(_result.DurationMs).ToString(@"mm\:ss") · @(_result.Bytes / 1024) KB (@_result.Bytes 바이트)</dd>
                     @if (_sealed is not null)
                     {
                         <dt>봉인 번호</dt><dd class="cc-mono">@_sealed.SealId</dd>
@@ -156,7 +156,7 @@
             _sealed = sealedMeeting; if (sealedMeeting is null) _error = err ?? "봉인 기록에 실패했습니다.";
             await js.InvokeVoidAsync("leaveRoom");
         }
-        catch (Exception ex) { _error = "봉인 실패: " + ex.Message; }
+        catch (Exception ex) { _recording = false; _error = "봉인 실패: " + ex.Message; }
         _busy = false; StateHasChanged();
     }
 
