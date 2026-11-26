@@ -10,5 +10,6 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // Our edge API (wwwroot/_worker.js) lives on the same origin as the app.
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<ConclaveApi>();
+builder.Services.AddScoped<FingerprintService>();
 
 await builder.Build().RunAsync();
