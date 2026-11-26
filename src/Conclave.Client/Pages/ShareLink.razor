@@ -1,0 +1,19 @@
+@inject ConclaveApi Api
+
+<div class="cc-row cc-share">
+    <input class="cc-input cc-mono" readonly value="@Url" aria-label="검증 링크" />
+    <button class="cc-btn" type="button" @onclick="Copy">@(_state switch { true => "복사됨", false => "복사 실패 — 직접 선택해 복사하세요", _ => "링크 복사" })</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Url { get; set; } = "";
+    private bool? _state;
+
+    private async Task Copy()
+    {
+        _state = await (await Api.Js()).InvokeAsync<bool>("copyText", Url);
+        StateHasChanged();
+        await Task.Delay(2000);
+        _state = null;
+    }
+}
