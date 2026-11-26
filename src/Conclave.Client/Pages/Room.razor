@@ -71,7 +71,7 @@
                     {
                         <dt>봉인 번호</dt><dd class="cc-mono">@_sealed.SealId</dd>
                         <dt>봉인 시각</dt><dd>@_sealed.SealedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</dd>
-                        <dt>검증 링크</dt><dd><a href="/verify/@_sealed.SealId">@Nav.BaseUri.TrimEnd('/')/verify/@_sealed.SealId</a></dd>
+                        <dt>검증 링크</dt><dd><a href="/verify/@_sealed.SealId">@VerifyLink.Build(Nav.BaseUri, _sealed.SealId)</a> <ShareLink Url="@VerifyLink.Build(Nav.BaseUri, _sealed.SealId)" /></dd>
                     }
                 </dl>
                 <p class="cc-muted cc-small">녹화 파일은 이 브라우저에만 있고 지문(SHA-256)만 Axowl 에 봉인됐습니다. 파일을 내려받아 두세요 — 검증 페이지에 올리면 일치 여부가 나옵니다.</p>
