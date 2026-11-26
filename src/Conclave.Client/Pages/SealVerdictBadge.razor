@@ -1,0 +1,41 @@
+@using Conclave.Client.Services
+@inject ConclaveApi Api
+
+<div class="cc-card cc-verify-verdict">
+    <h3>Axowl 봉인 체인 확인</h3>
+    @if (_verdict is null)
+    {
+        <p class="cc-muted"><span class="cc-spinner"></span> Axowl 원장에 물어보는 중…</p>
+    }
+    else if (_verdict.Verdict == SealVerdict.Match)
+    {
+        <div class="cc-result cc-ok cc-verdict-match">✅ 일치 — @_verdict.Reason</div>
+    }
+    else if (_verdict.Verdict == SealVerdict.Tampered)
+    {
+        <div class="cc-result cc-bad cc-verdict-tampered">❌ 변조됨 — @_verdict.Reason</div>
+    }
+    else
+    {
+        <div class="cc-result cc-verdict-unavailable">⚠️ 확인 불가 — @_verdict.Reason <button class="cc-btn" type="button" @onclick="Check">다시 확인</button></div>
+    }
+    @if (_ledger is not null)
+    {
+        <p class="cc-muted cc-small">Axowl 기록: @_ledger.CreatedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") · 무결성 @(_ledger.Integrity ?? "—") · <span class="cc-mono">@_ledger.Sha256</span></p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VerifyInfo Info { get; set; } = default!;
+    private LedgerRecord? _ledger; private VerdictResult? _verdict; private string? _checked;
+
+    protected override Task OnParametersSetAsync() => _checked == Info.SealId ? Task.CompletedTask : Check();
+
+    private async Task Check()
+    {
+        _checked = Info.SealId; _ledger = null; _verdict = null; StateHasChanged();
+        var (rec, err) = await Api.SendAsync<LedgerRecord>(HttpMethod.Get, $"/api/verify/{Uri.EscapeDataString(Info.SealId)}/ledger");
+        _ledger = rec;
+        _verdict = SealVerdictRules.Decide(Info, rec, err);
+    }
+}
