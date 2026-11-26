@@ -90,14 +90,12 @@ async function api(request, url, env) {
     const body = await request.json().catch(() => ({}));
     const sha = String(body.sha256 || '').toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(sha)) return json({ error: 'bad_sha256' }, 400);
-    const sealId = shortId(10);
-    const rows = await sql(env,
-      `update conclave_meetings set recording_sha256=$3, recording_bytes=$4, recording_ms=$5, seal_id=$6, sealed_at=now(),
-         ended_at=coalesce(ended_at, now()), axowl_event_id=$7
-       where id=$1 and host_sub=$2 and seal_id is null returning *`,
-      [mm[1], user.sub, sha, Number(body.bytes || 0), Number(body.durationMs || 0), sealId, String(body.axowlEventId || '').slice(0, 64) || null]);
-    if (!rows.length) return json({ error: 'not_found_or_already_sealed' }, 409);
-    return json({ ...pub(rows[0]), verifyUrl: `${url.origin}/verify/${sealId}` });
+    const row = await saveSealResult(env, {
+      meetingId: mm[1], hostSub: user.sub, sha256: sha, bytes: Number(body.bytes || 0), durationMs: Number(body.durationMs || 0),
+      sealId: shortId(10), axowlEventId: String(body.axowlEventId || '').slice(0, 64) || null,
+    });
+    if (!row) return json({ error: 'not_found_or_already_sealed' }, 409);
+    return json({ ...pub(row), verifyUrl: `${url.origin}/verify/${row.seal_id}` });
   }
 
   mm = p.match(/^\/api\/verify\/([A-Za-z0-9_-]{4,40})$/);
@@ -120,6 +118,29 @@ function pub(r) {
   return { id: r.id, title: r.title, hostName: r.host_name, createdAt: iso(r.created_at), startedAt: iso(r.started_at), endedAt: iso(r.ended_at),
     sealId: r.seal_id, sealedAt: iso(r.sealed_at), sha256: r.recording_sha256 || null, bytes: r.recording_bytes ? Number(r.recording_bytes) : null,
     durationMs: r.recording_ms ? Number(r.recording_ms) : null };
+}
+
+// ───────────────────────── recording seal store (conclave_meetings columns; no separate recordings table) ─────────────────────────
+// Seal state lives on the meeting row: recording_sha256, recording_bytes, recording_ms, seal_id, sealed_at, axowl_event_id.
+// A meeting is sealed at most once (seal_id is null → set); a second attempt returns null.
+async function getMeetingSeal(env, meetingId) {
+  await ensureSchema(env);
+  const rows = await sql(env, 'select id, host_sub, ended_at, recording_sha256, recording_bytes, recording_ms, seal_id, sealed_at, axowl_event_id from conclave_meetings where id=$1', [meetingId]);
+  if (!rows.length) return null;
+  const r = rows[0];
+  return { meetingId: r.id, hostSub: r.host_sub, ended: !!r.ended_at, sealed: !!r.seal_id, sealId: r.seal_id || null, sha256: r.recording_sha256 || null,
+    bytes: r.recording_bytes ? Number(r.recording_bytes) : null, durationMs: r.recording_ms ? Number(r.recording_ms) : null,
+    sealedAt: iso(r.sealed_at), axowlEventId: r.axowl_event_id || null };
+}
+
+async function saveSealResult(env, { meetingId, hostSub, sha256, bytes, durationMs, sealId, axowlEventId }) {
+  await ensureSchema(env);
+  const rows = await sql(env,
+    `update conclave_meetings set recording_sha256=$3, recording_bytes=$4, recording_ms=$5, seal_id=$6, sealed_at=now(),
+       ended_at=coalesce(ended_at, now()), axowl_event_id=$7
+     where id=$1 and host_sub=$2 and seal_id is null returning *`,
+    [meetingId, hostSub, sha256, bytes, durationMs, sealId, axowlEventId]);
+  return rows[0] || null;
 }
 
 // ───────────────────────── database (Neon HTTP SQL, no driver) ─────────────────────────
