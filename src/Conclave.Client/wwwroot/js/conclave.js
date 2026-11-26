@@ -107,18 +107,22 @@ export async function setCamera(on) { if (room) await room.localParticipant.setC
 export async function leaveRoom() { stopRecordingSilently(); if (room) { await room.disconnect(); room = null; } if (grid) grid.innerHTML = ''; }
 
 // ───────── recording (host) ─────────
-let recorder = null, chunks = [], recStart = 0, lastBlobUrl = null;
+let recorder = null, chunks = [], recStart = 0, lastBlobUrl = null, recError = null;
 export function startRecording() {
-  if (!room) throw new Error('not in a room');
+  if (!room) throw new Error('회의에 입장한 뒤에 녹화할 수 있습니다.');
+  if (recorder && recorder.state !== 'inactive') throw new Error('이미 녹화 중입니다.');
+  if (typeof MediaRecorder === 'undefined') throw new Error('이 브라우저는 녹화(MediaRecorder)를 지원하지 않습니다.');
   const tracks = [];
   room.localParticipant.trackPublications.forEach(pub => { if (pub.track && pub.track.mediaStreamTrack) tracks.push(pub.track.mediaStreamTrack); });
   // remote audio too, so the recording holds the whole conversation
   room.remoteParticipants.forEach(p => p.trackPublications.forEach(pub => { if (pub.track && pub.track.kind === 'audio' && pub.track.mediaStreamTrack) tracks.push(pub.track.mediaStreamTrack); }));
+  if (!tracks.length) throw new Error('녹화할 영상·음성이 없습니다. 카메라·마이크를 켠 뒤 다시 시도하세요.');
   localStream = new MediaStream(tracks);
   const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
   recorder = new MediaRecorder(localStream, { mimeType: mime });
-  chunks = []; recStart = Date.now();
+  chunks = []; recStart = Date.now(); recError = null;
   recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onerror = (e) => { recError = (e && e.error && e.error.message) || '녹화 중 오류가 발생했습니다.'; };
   recorder.start(1000);
   return mime;
 }
@@ -126,15 +130,19 @@ function stopRecordingSilently() { try { if (recorder && recorder.state !== 'ina
 
 /** Stops the recording, hashes it in the browser (SHA-256) and returns the fingerprint. The file never leaves this device. */
 export async function stopRecording() {
-  if (!recorder) throw new Error('not recording');
-  const done = new Promise(res => { recorder.onstop = res; });
-  recorder.stop(); await done;
-  const blob = new Blob(chunks, { type: recorder.mimeType });
+  if (!recorder) throw new Error('녹화 중이 아닙니다.');
+  const rec = recorder; recorder = null;
+  if (rec.state !== 'inactive') {
+    const done = new Promise(res => { rec.onstop = res; });
+    rec.stop(); await done;
+  }
+  if (recError) throw new Error(recError);
+  const blob = new Blob(chunks, { type: rec.mimeType });
+  if (!blob.size) throw new Error('녹화된 데이터가 없습니다. 조금 더 길게 녹화해 주세요.');
   const durationMs = Date.now() - recStart;
   const sha256 = await sha256Hex(await blob.arrayBuffer());
   if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
   lastBlobUrl = URL.createObjectURL(blob);
-  recorder = null;
   return { sha256, bytes: blob.size, durationMs, downloadUrl: lastBlobUrl, fileName: `conclave-${new Date(recStart).toISOString().replace(/[:.]/g, '-')}.webm` };
 }
 
