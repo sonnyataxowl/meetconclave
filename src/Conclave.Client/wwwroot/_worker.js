@@ -100,10 +100,13 @@ async function api(request, url, env) {
     return json({ ...pub(rows[0]), verifyUrl: `${url.origin}/verify/${sealId}` });
   }
 
+  // Public (no sign-in): only sealed recordings, only public columns — never host_sub.
   mm = p.match(/^\/api\/verify\/([A-Za-z0-9_-]{4,40})$/);
   if (mm && m === 'GET') {
     await ensureSchema(env);
-    const rows = await sql(env, 'select * from conclave_meetings where seal_id=$1', [mm[1]]);
+    const rows = await sql(env,
+      `select id, seal_id, title, host_name, recording_sha256, recording_bytes, recording_ms, started_at, ended_at, sealed_at, axowl_event_id
+         from conclave_meetings where (seal_id=$1 or id=$1) and seal_id is not null limit 1`, [mm[1]]);
     if (!rows.length) return json({ error: 'not_found' }, 404);
     const r = rows[0];
     return json({ sealId: r.seal_id, meetingId: r.id, title: r.title, hostName: r.host_name, sha256: r.recording_sha256,
