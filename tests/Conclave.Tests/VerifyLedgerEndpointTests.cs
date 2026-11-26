@@ -27,7 +27,15 @@ public class VerifyLedgerEndpointTests
     public void Worker_NeverPutsTheApiKeyInAResponse()
     {
         var js = Worker();
-        foreach (var line in js.Split('\n').Where(l => l.Contains("env.AXOWL_API_KEY")))
-            Assert.DoesNotContain("json(", line.Replace("detail: 'AXOWL_API_KEY 시크릿이 설정되지 않았습니다.'", ""));
+        var keyLines = js.Split('\n').Where(l => l.Contains("env.AXOWL_API_KEY")).ToList();
+        Assert.NotEmpty(keyLines);
+
+        // A "not configured" guard (!env.AXOWL_API_KEY) may answer with json(...), but only with static text — never interpolating anything.
+        foreach (var line in keyLines.Where(l => l.Contains("!env.AXOWL_API_KEY")))
+            Assert.DoesNotContain("${", line);
+
+        // Every other line that reads the key (e.g. the outgoing header) must not build a response.
+        foreach (var line in keyLines.Where(l => !l.Contains("!env.AXOWL_API_KEY")))
+            Assert.DoesNotContain("json(", line);
     }
 }
