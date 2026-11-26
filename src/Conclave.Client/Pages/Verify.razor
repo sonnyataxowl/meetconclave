@@ -3,7 +3,7 @@
 @using Conclave.Client.Services
 @inject ConclaveApi Api
 
-<PageTitle>봉인 검증 · @AppInfo.Name</PageTitle>
+<PageTitle>@VerifyLink.Title(_info?.Title)</PageTitle>
 
 <section class="cc-page cc-verify">
     <h1>봉인 검증</h1>
@@ -11,14 +11,17 @@
 
     @if (string.IsNullOrEmpty(SealId))
     {
+        <p class="cc-muted">@VerifyLink.EmptyHint</p>
         <form class="cc-row" @onsubmit="Go" @onsubmit:preventDefault>
-            <input class="cc-input" placeholder="봉인 번호" @bind="_input" />
+            <input class="cc-input" placeholder="봉인 번호 또는 검증 링크" @bind="_input" />
             <button class="cc-btn cc-btn-primary" type="submit">찾기</button>
         </form>
+        @if (_inputError is not null) { <p class="cc-error">@_inputError</p> }
     }
     else if (_info is null)
     {
-        <p class="cc-muted">@(_error ?? "봉인 기록을 불러오는 중…")</p>
+        <p class="@(_error is null ? "cc-muted" : "cc-error")">@(_error ?? "봉인 기록을 불러오는 중…")</p>
+        @if (_error is not null) { <a class="cc-btn" href="/verify">다른 번호로 찾기</a> }
     }
     else
     {
@@ -32,6 +35,7 @@
                 <dt>지문 (SHA-256)</dt><dd class="cc-mono">@_info.Sha256</dd>
                 <dt>크기 · 길이</dt><dd>@(_info.Bytes / 1024) KB · @TimeSpan.FromMilliseconds(_info.DurationMs).ToString(@"mm\:ss")</dd>
                 <dt>원장</dt><dd>Axowl · 조직 @_info.Org @(_info.AxowlEventId is null ? "" : $"· 이벤트 {_info.AxowlEventId}")</dd>
+                <dt>검증 링크</dt><dd><ShareLink Url="@VerifyLink.Build(Nav.BaseUri, _info.SealId)" /></dd>
             </dl>
         </div>
 
@@ -49,17 +53,23 @@
 @code {
     [Parameter] public string? SealId { get; set; }
     [Inject] NavigationManager Nav { get; set; } = default!;
-    private VerifyInfo? _info; private string? _error, _input, _fileHash; private bool _checking; private bool? _match;
+    private VerifyInfo? _info; private string? _error, _input, _inputError, _fileHash; private bool _checking; private bool? _match;
 
     protected override async Task OnParametersSetAsync()
     {
-        _info = null; _match = null;
+        _info = null; _match = null; _error = null;
         if (string.IsNullOrEmpty(SealId)) return;
         var (v, err) = await Api.VerifyAsync(SealId);
-        _info = v; _error = v is null ? (err ?? "봉인 기록이 없습니다.") : null;
+        _info = v; _error = v is null ? VerifyLink.ErrorMessage(err) : null;
     }
 
-    private void Go() { if (!string.IsNullOrWhiteSpace(_input)) Nav.NavigateTo($"/verify/{_input.Trim()}"); }
+    private void Go()
+    {
+        var id = VerifyLink.Normalize(_input);
+        if (id is null) { _inputError = VerifyLink.EmptyHint; return; }
+        _inputError = null;
+        Nav.NavigateTo($"/verify/{Uri.EscapeDataString(id)}");
+    }
 
     private async Task Check()
     {
